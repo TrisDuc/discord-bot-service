@@ -1,6 +1,6 @@
 package com.trisduc.triagebot.webhook;
 
-
+import com.trisduc.triagebot.config.DiscordProperties;
 import com.trisduc.triagebot.entity.Member;
 import com.trisduc.triagebot.entity.Project;
 import com.trisduc.triagebot.webhook.dto.CodeRabbitWebhookRequest;
@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.awt.*;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -20,9 +21,11 @@ public class DiscordNotifierService {
     private static final Logger log = LoggerFactory.getLogger(DiscordNotifierService.class);
 
     private final JDA jda;
+    private final DiscordProperties discordProperties;
 
-    public DiscordNotifierService(JDA jda) {
+    public DiscordNotifierService(JDA jda, DiscordProperties discordProperties) {
         this.jda = jda;
+        this.discordProperties = discordProperties;
     }
 
     public void sendTriageAlert(
@@ -32,12 +35,6 @@ public class DiscordNotifierService {
             Set<Member> owners,
             Set<String> fallbackRoleIds
     ) {
-        MessageChannel channel = jda.getTextChannelById(project.getDefaultChannelId());
-        if (channel == null) {
-            log.warn("Discord channel {} not found for project {}", project.getDefaultChannelId(), project.getProjectName());
-            return;
-        }
-
         String mentions = buildMentions(owners, fallbackRoleIds);
         EmbedBuilder embed = buildEmbed(request, modules);
 
@@ -45,12 +42,23 @@ public class DiscordNotifierService {
                 ? embed.build().getTitle()
                 : mentions;
 
-        channel.sendMessage(content)
-                .addEmbeds(embed.build())
-                .queue(
-                        success -> log.info("Sent triage alert for PR #{}", request.prNumber()),
-                        error -> log.error("Discord send failed for PR #{}", request.prNumber(), error)
-                );
+        sendEmbed(discordProperties.resolveChannelId(NotificationChannel.BOT_ALERTS), content, embed, "triage alert");
+    }
+
+    public void sendNotification(NotificationChannel targetChannel, GitHubEventRouterService.DiscordMessage message) {
+        EmbedBuilder embed = new EmbedBuilder()
+                .setTitle(message.title(), message.url())
+                .setColor(message.color());
+
+        if (message.description() != null) {
+            embed.setDescription(message.description());
+        }
+
+        for (Map.Entry<String, String> field : message.fields().entrySet()) {
+            embed.addField(field.getKey(), field.getValue(), true);
+        }
+
+        sendEmbed(discordProperties.resolveChannelId(targetChannel), null, embed, targetChannel.name());
     }
 
     private String buildMentions(Set<Member> owners, Set<String> fallbackRoleIds) {
@@ -64,12 +72,29 @@ public class DiscordNotifierService {
         return sb.toString().trim();
     }
 
+    private void sendEmbed(String channelId, String content, EmbedBuilder embed, String logContext) {
+        MessageChannel channel = jda.getTextChannelById(channelId);
+        if (channel == null) {
+            log.warn("Discord channel {} not found for {}", channelId, logContext);
+            return;
+        }
+
+        String safeContent = content == null || content.isBlank() ? "" : content;
+
+        channel.sendMessage(safeContent)
+                .addEmbeds(embed.build())
+                .queue(
+                        success -> log.info("Sent Discord notification to {} channel {}", logContext, channelId),
+                        error -> log.error("Discord send failed for {}", logContext, error)
+                );
+    }
+
     private EmbedBuilder buildEmbed(CodeRabbitWebhookRequest request, Set<String> modules) {
         boolean isFailure = "HIGH".equalsIgnoreCase(request.severity())
                 || "CI_FAILED".equalsIgnoreCase(request.alertType());
 
         EmbedBuilder embed = new EmbedBuilder()
-                .setTitle("PR #" + request.prNumber() + " — " + request.prTitle(), request.prUrl())
+                .setTitle("PR #" + request.prNumber() + " - " + request.prTitle(), request.prUrl())
                 .setColor(isFailure ? Color.RED : new Color(46, 204, 113))
                 .addField("Type", request.alertType(), true)
                 .addField("Author", request.githubUsername(), true);
