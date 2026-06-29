@@ -44,10 +44,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-        </dependency>
 
         <!-- Source: https://mvnrepository.com/artifact/net.dv8tion/JDA -->
         <dependency>
