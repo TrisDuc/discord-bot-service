@@ -3,6 +3,7 @@ package com.trisduc.triagebot.webhook;
 import com.trisduc.triagebot.config.DiscordProperties;
 import com.trisduc.triagebot.entity.Member;
 import com.trisduc.triagebot.entity.Project;
+import com.trisduc.triagebot.repository.MemberRepository;
 import com.trisduc.triagebot.webhook.dto.CodeRabbitWebhookRequest;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
@@ -22,10 +23,12 @@ public class DiscordNotifierService {
 
     private final JDA jda;
     private final DiscordProperties discordProperties;
+    private final MemberRepository memberRepository;
 
-    public DiscordNotifierService(JDA jda, DiscordProperties discordProperties) {
+    public DiscordNotifierService(JDA jda, DiscordProperties discordProperties, MemberRepository memberRepository) {
         this.jda = jda;
         this.discordProperties = discordProperties;
+        this.memberRepository = memberRepository;
     }
 
     public void sendTriageAlert(
@@ -58,7 +61,8 @@ public class DiscordNotifierService {
             embed.addField(field.getKey(), field.getValue(), true);
         }
 
-        sendEmbed(discordProperties.resolveChannelId(targetChannel), null, embed, targetChannel.name());
+        String mention = resolveMention(message.githubUsername());
+        sendEmbed(discordProperties.resolveChannelId(targetChannel), mention, embed, targetChannel.name());
     }
 
     private String buildMentions(Set<Member> owners, Set<String> fallbackRoleIds) {
@@ -87,6 +91,19 @@ public class DiscordNotifierService {
                         success -> log.info("Sent Discord notification to {} channel {}", logContext, channelId),
                         error -> log.error("Discord send failed for {}", logContext, error)
                 );
+    }
+
+    private String resolveMention(String githubUsername) {
+        if (githubUsername == null || githubUsername.isBlank()) {
+            return null;
+        }
+
+        return memberRepository.findByGithubUsername(githubUsername)
+                .filter(Member::isActive)
+                .map(Member::getDiscordUserId)
+                .filter(discordUserId -> discordUserId != null && !discordUserId.isBlank())
+                .map(discordUserId -> "<@" + discordUserId + ">")
+                .orElse(null);
     }
 
     private EmbedBuilder buildEmbed(CodeRabbitWebhookRequest request, Set<String> modules) {
