@@ -20,20 +20,49 @@ public class GitHubEventRouterService {
     private final ObjectMapper objectMapper;
     private final DiscordNotifierService discordNotifierService;
 
-    public void handle(String eventType, String payload) {
+    public void handle(String eventType, String payload, String webhookType) {
         try {
             JsonNode root = objectMapper.readTree(payload);
-            DiscordMessage message = buildMessage(eventType, root);
 
-            if (message == null) {
-                log.info("Skipping unsupported GitHub event {}", eventType);
-                return;
+            if ("bot-alert".equals(webhookType)) {
+                handleBotAlertEvent(eventType, root);
+            } else if ("feed".equals(webhookType)) {
+                handleFeedEvent(eventType, root);
+            } else if ("pr-status".equals(webhookType)) {
+                handlePrStatusEvent(eventType, root);
             }
 
-            discordNotifierService.sendNotification(resolveChannel(eventType, root), message);
         } catch (Exception e) {
             log.error("Failed to process GitHub event {}", eventType, e);
         }
+    }
+
+    private void handleBotAlertEvent(String eventType, JsonNode root) {
+        // Chỉ xử lý pull_request_review, issue_comment từ bot
+        DiscordMessage message = buildMessage(eventType, root);
+        if (message == null) return;
+        discordNotifierService.sendNotification(NotificationChannel.BOT_ALERTS, message);
+    }
+
+    private void handleFeedEvent(String eventType, JsonNode root) {
+        // Xử lý push, pull_request (opened/reopened/edited), create, delete
+        DiscordMessage message = buildMessage(eventType, root);
+        if (message == null) return;
+        discordNotifierService.sendNotification(NotificationChannel.GITHUB_FEED, message);
+    }
+
+    private void handlePrStatusEvent(String eventType, JsonNode root) {
+        // Xử lý workflow_run (completed only), pull_request (closed only)
+        if ("workflow_run".equals(eventType)) {
+            if (!"completed".equals(text(root, "action"))) {
+                log.debug("Skipping workflow_run event with action: {}", text(root, "action"));
+                return;
+            }
+        }
+
+        DiscordMessage message = buildMessage(eventType, root);
+        if (message == null) return;
+        discordNotifierService.sendNotification(NotificationChannel.PR_STATUS, message);
     }
 
     private NotificationChannel resolveChannel(String eventType, JsonNode root) {
