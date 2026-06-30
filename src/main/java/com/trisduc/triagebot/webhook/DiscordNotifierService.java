@@ -98,7 +98,7 @@ public class DiscordNotifierService {
             return null;
         }
 
-        return memberRepository.findByGithubUsername(githubUsername)
+        return memberRepository.findByGithubUsernameIgnoreCase(githubUsername)
                 .filter(Member::isActive)
                 .map(Member::getDiscordUserId)
                 .filter(discordUserId -> discordUserId != null && !discordUserId.isBlank())

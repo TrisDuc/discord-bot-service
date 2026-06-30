@@ -232,7 +232,7 @@ public class GitHubEventRouterService {
                 emptyToNull(text(review, "body")),
                 new Color(230, 126, 34),
                 fields,
-                reviewer
+                text(pr, "user", "login")
         );
     }
 
@@ -256,7 +256,7 @@ public class GitHubEventRouterService {
                 emptyToNull(text(comment, "body")),
                 new Color(230, 126, 34),
                 fields,
-                reviewer
+                text(pr, "user", "login")
         );
     }
 
@@ -283,7 +283,7 @@ public class GitHubEventRouterService {
                 emptyToNull(text(comment, "body")),
                 isBotReviewEvent("issue_comment", root) ? new Color(230, 126, 34) : new Color(52, 152, 219),
                 fields,
-                commenter
+                isBotReviewEvent("issue_comment", root) ? text(issue, "user", "login") : commenter
         );
     }
 
