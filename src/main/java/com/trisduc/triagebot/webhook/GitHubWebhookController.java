@@ -88,7 +88,7 @@ public class GitHubWebhookController {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] hash = md.digest(payload.getBytes(StandardCharsets.UTF_8));
-            return javax.xml.bind.DatatypeConverter.printHexBinary(hash);
+            return java.util.HexFormat.of().withUpperCase().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             return null;
         }
